@@ -1,3 +1,15 @@
+## [1.3.1](https://github.com/CoCreate-app/CoCreate-plugins/compare/v1.3.0...v1.3.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* bump package versions ([3f992ea](https://github.com/CoCreate-app/CoCreate-plugins/commit/3f992ea145328efac344e4f470fe19a87d5209e9))
+* clean attribute name for method matching in processPlugin function ([7389d12](https://github.com/CoCreate-app/CoCreate-plugins/commit/7389d12bd6f4206c506456d64341ceef4b304313))
+* correct minor typos in code comments and variable names for clarity. ([7e43622](https://github.com/CoCreate-app/CoCreate-plugins/commit/7e4362289c9f51ac6673873802d5b58a7992638e))
+* demo plugin initialization syntax and remove redundant tests ([c126bc8](https://github.com/CoCreate-app/CoCreate-plugins/commit/c126bc87edfb9669ea6c8a79e13a0cd0c09a1bd3))
+* removed post install and add add packages to apprved list ([548be97](https://github.com/CoCreate-app/CoCreate-plugins/commit/548be977ba710af907ad8e95f7ebcd3a75462326))
+* semantic version handling ([7606d54](https://github.com/CoCreate-app/CoCreate-plugins/commit/7606d54cd447a3cf10c3f86d54bca1f0aa7fe1a1))
+
 # [1.3.0](https://github.com/CoCreate-app/CoCreate-plugins/compare/v1.2.1...v1.3.0) (2026-03-11)
 
 
