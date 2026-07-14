@@ -38,16 +38,27 @@
                 <p class="text-secondary small">This button sets multiple properties on the Toastify instance and then calls the execution method, all in order.</p>
                 <div class="live-preview flex-column">
                     <button type="button" class="btn btn-primary px-4"
-                        plugin="Toastify" 
-                        Toastify()='$parse({"message": "Hello from a single object!", "duration": 3000, "style": {"background": "#0d6efd"}})'
-                        Toastify.showToast()="">
+                        plugin='{
+                            "Toastify": {
+                                "text": "Hello from a single object!",
+                                "duration": 3000,
+                                "style": {
+                                    "background": "#0d6efd"
+                                }
+                            },
+                            "Toastify.showToast": []
+                        }'>
                         Trigger Sequential Toast
                     </button>
                     <div class="code-block w-100">
-                        plugin="Toastify" <br>
-                        Toastify.text="..." <br>
-                        Toastify.showToast()=""
-                    </div>
+                        plugin='{<br>
+                        &nbsp;&nbsp;"Toastify": {<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;"text": "...",<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;"duration": 3000<br>
+                        &nbsp;&nbsp;},<br>
+                        &nbsp;&nbsp;"Toastify.showToast": []<br>
+                        }'
+                    </div> 
                 </div>
             </div>
         </div>
