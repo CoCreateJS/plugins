@@ -40,10 +40,6 @@ export function init(elements) {
     });
 }
 
-/**
- * Preloads registered script and stylesheet resources for designated plugins.
- * @param {string[]} pluginNames 
- */
 async function preloadResources(pluginNames) {
     for (const name of pluginNames) {
         const pluginDef = plugins[name];
@@ -86,10 +82,13 @@ async function preloadResources(pluginNames) {
 }
 
 async function processPlugin(el) {
-    const rawPluginAttr = el.attributes['plugin']?.value;
+    if (!el.attributes) return;
+
+    // Direct attributes collection map lookup to avoid binding/context prototype errors
+    const pluginAttrNode = el.attributes['plugin'] || el.attributes.getNamedItem?.('plugin');
+    const rawPluginAttr = pluginAttrNode?.value?.trim();
     if (!rawPluginAttr) return;
 
-    // Symmetrical, pure context separation. $this strictly points to HTML Element.
     const context = {
         element: el,
         this: el,
@@ -100,8 +99,16 @@ async function processPlugin(el) {
     };
 
     try {
-        const parsedConfig = JSON.parse(rawPluginAttr);
-        const configs = Array.isArray(parsedConfig) ? parsedConfig : [parsedConfig];
+        let configs = [];
+        
+        // Unified Direct Parser: Pure JSON parsing with simple zero-argument fallback
+        if (rawPluginAttr.startsWith('{') || rawPluginAttr.startsWith('[')) {
+            const parsedConfig = JSON.parse(rawPluginAttr);
+            configs = Array.isArray(parsedConfig) ? parsedConfig : [parsedConfig];
+        } else {
+            // Symmetrical Fallback: Plain strings mapped straight to constructor blocks
+            configs = [{ [rawPluginAttr]: [] }];
+        }
         
         const targetPlugins = new Set();
         configs.forEach(conf => {
@@ -119,25 +126,30 @@ async function processPlugin(el) {
             await executeConfigBlock(context, configBlock);
         }
     } catch (err) {
-        console.error("[Plugin System] Failed to parse and execute JSON configuration in plugin attribute:", err, rawPluginAttr);
+        console.error("[Plugin System] Failed to parse and execute plugin configuration:", err, rawPluginAttr);
     }
 }
 
-/**
- * Instantiates the class constructor or initialization function for the plugin.
- */
 function instantiatePlugin(ConstructorFunc, argsArray) {
     if (typeof ConstructorFunc !== 'function') return ConstructorFunc;
     
-    // EXCEPTION FIX: Strictly pre-check the function signature for modern ES6 classes.
-    // Standard functions (like particlesJS) have a truthy .prototype property by default but are NOT classes.
+    // Check standard ES6 class structure
     const isEs6Class = /^\s*class\s+/.test(ConstructorFunc.toString());
     
     if (isEs6Class) {
         return new ConstructorFunc(...argsArray);
     }
-    // Call standard functions natively with spread arguments
-    return ConstructorFunc(...argsArray);
+    
+    try {
+        // Fallback Step A: Attempt standard function invocation (e.g. particlesJS)
+        return ConstructorFunc(...argsArray);
+    } catch (err) {
+        // Fallback Step B: If invocation throws constructor error (e.g. Babel transpiled ES5 classes)
+        if (err instanceof TypeError) {
+            return new ConstructorFunc(...argsArray);
+        }
+        throw err;
+    }
 }
 
 async function executeConfigBlock(context, configBlock) {

@@ -128,9 +128,17 @@ const getSandboxScope = (context) => {
     };
 };
 
+/**
+ * Main recursive traversal loop of the AST Compiler.
+ * Analyzes object structures from the inside-out to resolve nested expression boundaries.
+ */
 export async function processOperators(context, execute) {
     if (execute instanceof Promise) {
         execute = await execute;
+    }
+
+    if (execute === null || execute === undefined) {
+        return execute;
     }
 
     if (Array.isArray(execute)) {
@@ -139,10 +147,10 @@ export async function processOperators(context, execute) {
             evaluatedArray[i] = await processOperators(context, execute[i]);
         }
         return evaluatedArray;
-    } else if (typeof execute === "object" && execute !== null) {
+    } else if (typeof execute === "object") {
         const keys = Object.keys(execute);
         
-        // Match operators starting with "$" except structural database/storage tags
+        // Match operators starting with "$" except raw database storage parameters
         const operatorKey = keys.find(k => k.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(k));
         
         if (operatorKey && keys.length === 1) {
@@ -184,7 +192,7 @@ async function executeOperator(context, operator, args) {
         ...context
     };
 
-    // Evaluate basic context property lookups
+    // Evaluate core context property mappings
     if (args === undefined) {
         if (operator.startsWith("$state.")) {
             return getValueFromObject(localContext.state, operator.substring(7));
@@ -208,10 +216,8 @@ async function executeOperator(context, operator, args) {
         } else if (operator === "$rawBody") {
             return localContext.rawBody;
         } else if (operator === "$this" || operator === "$element") {
-            // $this and $element strictly point to the underlying HTML Element
             return localContext.element;
         } else if (operator === "$plugin" || operator === "$instance") {
-            // Shorthand pointing directly to the active instantiated plugin context
             return localContext.plugin;
         } else if (operator === "$value") {
             const el = localContext.element;
@@ -234,7 +240,6 @@ async function executeOperator(context, operator, args) {
     let parentContext = SandboxScope;
 
     if (target === undefined && localContext.element) {
-        // Dynamically resolve properties/plugins attached to the HTML Element (e.g. element.FullCalendar)
         target = localContext.element[parts[0]];
         parentContext = localContext.element;
     }
@@ -249,7 +254,6 @@ async function executeOperator(context, operator, args) {
         if (typeof target === 'function') {
             let argsArray = [];
             if (args !== undefined) {
-                // Intercept human-friendly parameter keywords ($args, $arguments)
                 if (typeof args === 'object' && args !== null && (args.$args !== undefined || args.$arguments !== undefined)) {
                     const explicitArgs = args.$args !== undefined ? args.$args : args.$arguments;
                     
@@ -274,7 +278,6 @@ async function executeOperator(context, operator, args) {
                 return new target(...argsArray);
             }
 
-            // Implicit auto-await executes any resolved function natively
             return await target.apply(parentContext, argsArray);
         } else if (target !== undefined) {
             return target;
@@ -285,6 +288,6 @@ async function executeOperator(context, operator, args) {
 }
 
 export { processOperators as processOperatorsAsync };
-export const customOperators = {}; // Stateless fallback placeholder registry
+export const customOperators = {}; 
 
 export default processOperators;
