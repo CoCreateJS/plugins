@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     "organization_id": "",
     "key": "",
     "host": "",

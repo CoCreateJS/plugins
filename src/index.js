@@ -1,115 +1,198 @@
-/********************************************************************************
- * Copyright (C) 2026 CoCreate and Contributors.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- *
- ********************************************************************************/
+import Observer from '@cocreate/observer';
+import { astAsync } from '@cocreate/utils';
 
-import Observer from "@cocreate/observer";
-import { processOperators } from "./operators.js";
-
-const plugins = {};
 const scriptCache = new Map();
-const cssMarker = typeof document !== 'undefined' ? document.querySelector('link[plugins]') : null;
+const cssMarker = typeof document !== 'undefined' 
+    ? document.head.querySelector('meta[name="viewport"]') || document.head.lastChild 
+    : null;
 
 /**
- * Initializes plugins on a collection of HTML elements.
- * @param {HTMLElement|HTMLElement[]|NodeList} elements 
+ * Retrieves the global plugin configuration object from window.CoCreateConfig.
+ * @returns {Object}
  */
-export function init(elements) {
-    if (!elements) return;
-    const collection = (elements instanceof HTMLElement || elements instanceof Element) 
-        ? [elements] 
-        : Array.from(elements);
-    
-    collection.forEach(el => {
-        if (el) {
-            processPlugin(el);
+function getPluginsConfig() {
+    if (typeof window !== 'undefined' && window.CoCreateConfig && window.CoCreateConfig.plugins) {
+        return window.CoCreateConfig.plugins;
+    }
+    return {};
+}
+
+/**
+ * Dynamically registers or updates a plugin definition in global config.
+ * @param {string} name - Plugin identifier
+ * @param {Object} config - Plugin configuration object (js, css, etc.)
+ */
+export function registerPlugin(name, config) {
+    if (typeof window !== 'undefined') {
+        window.CoCreateConfig = window.CoCreateConfig || {};
+        window.CoCreateConfig.plugins = window.CoCreateConfig.plugins || {};
+        window.CoCreateConfig.plugins[name] = config;
+    }
+}
+
+/**
+ * Dynamic script loader to ensure plugin scripts are loaded once.
+ * Sets crossOrigin="anonymous" by default for simple string URLs.
+ * @param {string|Object} item - Script URL or object with configuration
+ * @returns {Promise<void>}
+ */
+function loadScript(item) {
+    const src = typeof item === 'string' ? item : item?.src;
+    if (!src) return Promise.resolve();
+
+    if (scriptCache.has(src)) return scriptCache.get(src);
+
+    const promise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+
+        // Default crossOrigin to "anonymous" unless explicitly set otherwise in an object
+        const crossOrigin = typeof item === 'object' && 'crossOrigin' in item ? item.crossOrigin : 'anonymous';
+        if (crossOrigin) {
+            script.crossOrigin = crossOrigin;
+        }
+
+        if (typeof item === 'object' && item.integrity) {
+            script.integrity = item.integrity;
+        }
+
+        script.onload = () => resolve();
+        script.onerror = () => {
+            scriptCache.delete(src);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
+        document.head.appendChild(script);
+    });
+
+    scriptCache.set(src, promise);
+    return promise;
+}
+
+/**
+ * Dynamic CSS stylesheet loader for plugins.
+ * Sets crossOrigin="anonymous" by default for simple string URLs.
+ * @param {string|Object} item - Stylesheet URL or object with configuration
+ * @returns {Promise<void>}
+ */
+function loadCSS(item) {
+    const href = typeof item === 'string' ? item : item?.href;
+    if (!href) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`link[href="${href}"]`)) {
+            return resolve();
+        }
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+
+        // Default crossOrigin to "anonymous" unless explicitly set otherwise in an object
+        const crossOrigin = typeof item === 'object' && 'crossOrigin' in item ? item.crossOrigin : 'anonymous';
+        if (crossOrigin) {
+            link.crossOrigin = crossOrigin;
+        }
+
+        if (typeof item === 'object' && item.integrity) {
+            link.integrity = item.integrity;
+        }
+
+        link.onload = () => resolve();
+        link.onerror = () => reject(new Error(`Failed to load stylesheet: ${href}`));
+
+        if (cssMarker && cssMarker.parentNode) {
+            cssMarker.parentNode.insertBefore(link, cssMarker);
+        } else {
+            document.head.appendChild(link);
         }
     });
 }
 
+/**
+ * Preloads JS scripts and CSS stylesheets declared in global plugins config.
+ * Runs in parallel using Promise.allSettled.
+ * @param {Array<string>} pluginNames - Names of target plugins to preload
+ */
 async function preloadResources(pluginNames) {
-    for (const name of pluginNames) {
-        const pluginDef = plugins[name];
-        if (pluginDef && !window[name]) {
-            if (pluginDef.css) {
-                pluginDef.css.forEach(href => {
-                    if (!document.querySelector(`link[href="${href}"]`)) {
-                        const link = document.createElement("link");
-                        link.rel = "stylesheet"; 
-                        link.href = href;
-                        if (cssMarker) cssMarker.parentNode.insertBefore(link, cssMarker);
-                        else document.head.appendChild(link);
-                    }
-                });
-            }
+    const plugins = getPluginsConfig();
+    const promises = [];
 
-            if (pluginDef.js) {
-                for (const item of pluginDef.js) {
-                    const src = typeof item === 'string' ? item : item.src;
-                    if (!src) continue;
-                    if (!scriptCache.has(src)) {
-                        const existingScript = document.querySelector(`script[src*="${src}"]`);
-                        if (existingScript && (existingScript.dataset.loaded === "true" || window[name])) {
-                            scriptCache.set(src, Promise.resolve());
-                        } else {
-                            const s = document.createElement("script");
-                            s.src = src;
-                            scriptCache.set(src, new Promise((resolve) => {
-                                s.onload = () => { s.dataset.loaded = "true"; resolve(); };
-                                s.onerror = () => resolve();
-                                document.head.appendChild(s);
-                            }));
-                        }
-                    }
-                    await scriptCache.get(src);
-                }
+    for (const name of pluginNames) {
+        const config = plugins[name];
+        if (config) {
+            if (config.css) {
+                const cssFiles = Array.isArray(config.css) ? config.css : [config.css];
+                cssFiles.forEach(href => promises.push(loadCSS(href)));
+            }
+            if (config.js) {
+                const jsFiles = Array.isArray(config.js) ? config.js : [config.js];
+                jsFiles.forEach(src => promises.push(loadScript(src)));
             }
         }
     }
+
+    const results = await Promise.allSettled(promises);
+    results.forEach(res => {
+        if (res.status === 'rejected') {
+            console.warn('[Plugin System]', res.reason.message || res.reason);
+        }
+    });
 }
 
-async function processPlugin(el) {
-    if (!el.attributes) return;
+/**
+ * Helper to poll window for plugin library constructor if not immediately present.
+ * @param {string} pluginName - Target plugin identifier
+ * @param {number} retries - Number of retries
+ * @param {number} delay - Retry interval in ms
+ * @returns {Promise<Function|Object|null>}
+ */
+async function waitForPluginOnWindow(pluginName, retries = 5, delay = 50) {
+    for (let i = 0; i < retries; i++) {
+        const lib = getPluginLibrary(pluginName);
+        if (lib) return lib;
+        await new Promise(res => setTimeout(res, delay));
+    }
+    return getPluginLibrary(pluginName);
+}
 
-    // Direct attributes collection map lookup to avoid binding/context prototype errors
+/**
+ * Helper to resolve and normalize plugin library constructor from window object.
+ * @param {string} pluginName - The target plugin identifier
+ * @returns {Function|Object|null}
+ */
+function getPluginLibrary(pluginName) {
+    if (typeof window === 'undefined') return null;
+    if (window[pluginName]) return window[pluginName];
+
+    // Try capitalized variant (e.g. 'simpleBar' -> 'SimpleBar')
+    const capitalized = pluginName.charAt(0).toUpperCase() + pluginName.slice(1);
+    if (window[capitalized]) return window[capitalized];
+
+    return null;
+}
+
+/**
+ * Parses element 'plugin' attribute, executes AST configuration via astAsync,
+ * sets core library on window, and attaches instance onto element property.
+ * @param {Element} el - DOM element with plugin attribute
+ */
+async function processPlugin(el) {
+    if (!el || !el.attributes) return;
+
     const pluginAttrNode = el.attributes['plugin'] || el.attributes.getNamedItem?.('plugin');
     const rawPluginAttr = pluginAttrNode?.value?.trim();
     if (!rawPluginAttr) return;
 
-    const context = {
-        element: el,
-        this: el,
-        plugin: null,  // Tracks active sibling plugin instance
-        data: { ...el.dataset },
-        event: {},
-        crud: window.CoCreate?.crud || null
-    };
-
     try {
         let configs = [];
-        
-        // Unified Direct Parser: Pure JSON parsing with simple zero-argument fallback
+
         if (rawPluginAttr.startsWith('{') || rawPluginAttr.startsWith('[')) {
             const parsedConfig = JSON.parse(rawPluginAttr);
             configs = Array.isArray(parsedConfig) ? parsedConfig : [parsedConfig];
         } else {
-            // Symmetrical Fallback: Plain strings mapped straight to constructor blocks
             configs = [{ [rawPluginAttr]: [] }];
         }
-        
+
         const targetPlugins = new Set();
         configs.forEach(conf => {
             Object.keys(conf).forEach(k => {
@@ -118,119 +201,77 @@ async function processPlugin(el) {
                 }
             });
         });
-        
+
         await preloadResources(Array.from(targetPlugins));
 
-        // Execute each configuration block sequentially
         for (const configBlock of configs) {
-            await executeConfigBlock(context, configBlock);
-        }
-    } catch (err) {
-        console.error("[Plugin System] Failed to parse and execute plugin configuration:", err, rawPluginAttr);
-    }
-}
+            for (const [pluginName, astValue] of Object.entries(configBlock)) {
+                // Poll window to ensure script execution has completed
+                const pluginLib = await waitForPluginOnWindow(pluginName);
 
-function instantiatePlugin(ConstructorFunc, argsArray) {
-    if (typeof ConstructorFunc !== 'function') return ConstructorFunc;
-    
-    // Check standard ES6 class structure
-    const isEs6Class = /^\s*class\s+/.test(ConstructorFunc.toString());
-    
-    if (isEs6Class) {
-        return new ConstructorFunc(...argsArray);
-    }
-    
-    try {
-        // Fallback Step A: Attempt standard function invocation (e.g. particlesJS)
-        return ConstructorFunc(...argsArray);
-    } catch (err) {
-        // Fallback Step B: If invocation throws constructor error (e.g. Babel transpiled ES5 classes)
-        if (err instanceof TypeError) {
-            return new ConstructorFunc(...argsArray);
-        }
-        throw err;
-    }
-}
-
-async function executeConfigBlock(context, configBlock) {
-    for (const [key, value] of Object.entries(configBlock)) {
-        // 1. If key is an operator, process it natively via AST engine
-        if (key.startsWith("$")) {
-            await processOperators(context, { [key]: value });
-            continue;
-        }
-
-        // 2. Intercept standard lifecycle methods to bind them directly as functions on the Element
-        if (["getValue", "setValue", "read", "write"].includes(key)) {
-            context.element[key] = async function(...args) {
-                const localContext = {
-                    ...context,
-                    event: { ...context.event, value: args[0], arguments: args }
-                };
-                return await processOperators(localContext, value);
-            };
-            continue;
-        }
-
-        const parts = key.split('.');
-        const rootPluginName = parts[0];
-
-        // 3. Resolve target from window object using dot notation
-        let ConstructorFunc = window;
-        for (const part of parts) {
-            if (ConstructorFunc) {
-                ConstructorFunc = ConstructorFunc[part];
-            }
-        }
-
-        // 4. If it's a function, treat it as a constructor to initialize the plugin
-        if (typeof ConstructorFunc === 'function' && !context.element[rootPluginName]) {
-            let constructorArgs = [];
-            if (value !== undefined) {
-                const evaluatedArgs = await processOperators(context, value);
-                constructorArgs = Array.isArray(evaluatedArgs) ? evaluatedArgs : [evaluatedArgs];
-            }
-
-            // Create the plugin instance and bind it directly to the element under its root name
-            const instance = instantiatePlugin(ConstructorFunc, constructorArgs);
-            context.element[rootPluginName] = instance;
-            context.plugin = instance; // Update context.plugin reference for sibling method chaining
-            continue;
-        }
-
-        // 5. Explicit Instance Method Chaining (e.g. "FullCalendar.render")
-        let methodTarget = context.element[rootPluginName];
-        if (methodTarget && parts.length > 1) {
-            let method = methodTarget;
-            let parent = methodTarget;
-            for (let i = 1; i < parts.length; i++) {
-                parent = method;
-                if (method) method = method[parts[i]];
-            }
-            if (typeof method === 'function') {
-                let methodArgs = [];
-                if (value !== undefined) {
-                    const evaluatedArgs = await processOperators(context, value);
-                    methodArgs = Array.isArray(evaluatedArgs) ? evaluatedArgs : [evaluatedArgs];
+                // Ensure plugin library definition is attached to window once loaded
+                if (pluginLib && typeof window !== 'undefined' && !window[pluginName]) {
+                    window[pluginName] = pluginLib;
                 }
-                await method.apply(parent, methodArgs);
-                continue;
+
+                // Format operator key with $ for AST engine recognition (e.g. SimpleBar -> $SimpleBar)
+                const operatorName = pluginName.startsWith('$') ? pluginName : `$${pluginName}`;
+
+                // Create constructor wrapper to safely instantiate class/function
+                const opWrapper = function(params) {
+                    const args = Array.isArray(params) ? params : [params];
+                    if (typeof pluginLib === 'function') {
+                        try {
+                            return new pluginLib(...args);
+                        } catch (e) {
+                            return pluginLib(...args);
+                        }
+                    }
+                    return pluginLib;
+                };
+
+                // Provide operator wrapper in context for AST registry lookup
+                const context = {
+                    [operatorName]: opWrapper
+                };
+
+                // Execute AST with the $ operator key so astAsync invokes operatorKey logic
+                const result = await astAsync({
+                    node: el,
+                    sandbox: context,
+                    executeAST: { [operatorName]: astValue }
+                });
+
+                if (result !== undefined && !pluginName.startsWith('$')) {
+                    // Attach returned plugin instance directly onto element property
+                    el[pluginName] = result;
+                }
             }
         }
+    } catch (err) {
+        console.error('[Plugin System] Failed to parse and execute plugin configuration:', err, rawPluginAttr);
+    }
+}
 
-        // 6. Sibling Method Chaining (e.g. "render" directly on context.plugin)
-        if (context.plugin && typeof context.plugin[key] === 'function') {
-            let methodArgs = [];
-            if (value !== undefined) {
-                const evaluatedArgs = await processOperators(context, value);
-                methodArgs = Array.isArray(evaluatedArgs) ? evaluatedArgs : [evaluatedArgs];
+/**
+ * Initializes plugins on single elements, collections, or selector query matches.
+ * @param {Element|NodeList|Array|string} elements - Target element(s) or DOM query selector
+ */
+export function init(elements) {
+    if (!elements) return;
+
+    if (typeof elements === 'string') {
+        elements = document.querySelectorAll(elements);
+    }
+
+    if (elements instanceof Element) {
+        processPlugin(elements);
+    } else if (elements.length !== undefined || Array.isArray(elements)) {
+        Array.from(elements).forEach(el => {
+            if (el instanceof Element) {
+                processPlugin(el);
             }
-            await context.plugin[key].apply(context.plugin, methodArgs);
-            continue;
-        }
-
-        // 7. Fallback: Process operators or generic actions on properties
-        await processOperators(context, { [key]: value });
+        });
     }
 }
 
@@ -244,11 +285,7 @@ if (typeof document !== 'undefined') {
         callback: (mutation) => init(mutation.target)
     });
 
-    import("./CoCreate.config.js")
-        .then((Config) => {
-            const data = Config.plugins || Config.default?.plugins || Config.default || {};
-            Object.assign(plugins, data);
-        })
-        .catch(() => {})
-        .finally(() => init(document.querySelectorAll(selector)));
+    init(document.querySelectorAll(selector));
 }
+
+export default { init, registerPlugin };
