@@ -196,7 +196,7 @@ async function processPlugin(el) {
         const targetPlugins = new Set();
         configs.forEach(conf => {
             Object.keys(conf).forEach(k => {
-                if (!k.startsWith('$')) {
+                if (!k.startsWith('\u0024')) {
                     targetPlugins.add(k.split('.')[0]);
                 }
             });
@@ -215,7 +215,7 @@ async function processPlugin(el) {
                 }
 
                 // Format operator key with $ for AST engine recognition (e.g. SimpleBar -> $SimpleBar)
-                const operatorName = pluginName.startsWith('$') ? pluginName : `$${pluginName}`;
+                const operatorName = pluginName.startsWith('\u0024') ? pluginName : `$${pluginName}`;
 
                 // Create constructor wrapper to safely instantiate class/function
                 const opWrapper = function(params) {
@@ -242,7 +242,7 @@ async function processPlugin(el) {
                     executeAST: { [operatorName]: astValue }
                 });
 
-                if (result !== undefined && !pluginName.startsWith('$')) {
+                if (result !== undefined && !pluginName.startsWith('\u0024')) {
                     // Attach returned plugin instance directly onto element property
                     el[pluginName] = result;
                 }
