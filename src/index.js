@@ -1,5 +1,5 @@
 import Observer from '@cocreate/observer';
-import { astAsync } from '@cocreate/utils';
+import { astSync, astAsync } from '@cocreate/utils';
 
 const scriptCache = new Map();
 const cssMarker = typeof document !== 'undefined' 
@@ -171,6 +171,94 @@ function getPluginLibrary(pluginName) {
     return null;
 }
 
+function getPluginNames(configBlock) {
+    const configuredPlugins = getPluginsConfig();
+    const pluginNames = new Set();
+
+    for (const key of Object.keys(configBlock)) {
+        const name = key.replace(/^\$/, '').split('.')[0];
+        if (configuredPlugins[name] || getPluginLibrary(name)) {
+            pluginNames.add(name);
+        }
+    }
+
+    return pluginNames;
+}
+
+function createPluginAST(configBlock, pluginNames, libraries) {
+    const ast = {};
+    const hooks = {};
+
+    for (const [key, value] of Object.entries(configBlock)) {
+        const normalizedKey = key.replace(/^\$/, '');
+        const pluginName = normalizedKey.split('.')[0];
+
+        if (key === 'getValue' || key === 'setValue') {
+            hooks[key] = value;
+            continue;
+        }
+
+        if (!pluginNames.has(pluginName)) {
+            ast[key] = value;
+            continue;
+        }
+
+        if (normalizedKey.includes('.')) {
+            ast[normalizedKey] = { [`$${normalizedKey}`]: value };
+            continue;
+        }
+
+        const library = libraries[pluginName];
+        const members = value && typeof value === 'object' && !Array.isArray(value)
+            ? Object.entries(value)
+            : [];
+
+        if (typeof library !== 'function' && members.length === 1) {
+            const [member, parameters] = members[0];
+            ast[pluginName] = { [`$${pluginName}.${member}`]: parameters };
+        } else {
+            ast[pluginName] = { [`$${pluginName}`]: value };
+        }
+    }
+
+    return { ast, hooks };
+}
+
+function createRuntimeScope(libraries, result, event) {
+    return {
+        ...libraries,
+        ...result,
+        ...(event ? { event } : {})
+    };
+}
+
+function createElementHooks(el, hooks, libraries, result) {
+    if (hooks.getValue !== undefined) {
+        const getValueAST = typeof hooks.getValue === 'string' && hooks.getValue.startsWith('$')
+            ? { [hooks.getValue]: [] }
+            : hooks.getValue;
+
+        el.getValue = () => astSync({
+            executeAST: getValueAST,
+            sandbox: createRuntimeScope(libraries, result),
+            node: el
+        });
+        el.getValueAsync = () => astAsync({
+            executeAST: getValueAST,
+            sandbox: createRuntimeScope(libraries, result),
+            node: el
+        });
+    }
+
+    if (hooks.setValue !== undefined) {
+        el.setValue = (value, dispatch) => astSync({
+            executeAST: hooks.setValue,
+            sandbox: createRuntimeScope(libraries, result, { value, dispatch }),
+            node: el
+        });
+    }
+}
+
 /**
  * Parses element 'plugin' attribute, executes AST configuration via astAsync,
  * sets core library on window, and attaches instance onto element property.
@@ -193,60 +281,38 @@ async function processPlugin(el) {
             configs = [{ [rawPluginAttr]: [] }];
         }
 
-        const targetPlugins = new Set();
-        configs.forEach(conf => {
-            Object.keys(conf).forEach(k => {
-                if (!k.startsWith('\u0024')) {
-                    targetPlugins.add(k.split('.')[0]);
-                }
-            });
-        });
+        const targetPlugins = new Set(
+            configs.flatMap(configBlock => Array.from(getPluginNames(configBlock)))
+        );
 
         await preloadResources(Array.from(targetPlugins));
 
         for (const configBlock of configs) {
-            for (const [pluginName, astValue] of Object.entries(configBlock)) {
-                // Poll window to ensure script execution has completed
-                const pluginLib = await waitForPluginOnWindow(pluginName);
+            const pluginNames = getPluginNames(configBlock);
+            const libraries = {};
 
-                // Ensure plugin library definition is attached to window once loaded
-                if (pluginLib && typeof window !== 'undefined' && !window[pluginName]) {
-                    window[pluginName] = pluginLib;
+            for (const pluginName of pluginNames) {
+                const library = await waitForPluginOnWindow(pluginName);
+                if (!library) {
+                    throw new Error(`Plugin '${pluginName}' is not available on window.`);
                 }
+                libraries[pluginName] = library;
+            }
 
-                // Format operator key with $ for AST engine recognition (e.g. SimpleBar -> $SimpleBar)
-                const operatorName = pluginName.startsWith('\u0024') ? pluginName : `$${pluginName}`;
+            const { ast, hooks } = createPluginAST(configBlock, pluginNames, libraries);
+            const result = await astAsync({
+                executeAST: ast,
+                sandbox: libraries,
+                node: el
+            });
 
-                // Create constructor wrapper to safely instantiate class/function
-                const opWrapper = function(params) {
-                    const args = Array.isArray(params) ? params : [params];
-                    if (typeof pluginLib === 'function') {
-                        try {
-                            return new pluginLib(...args);
-                        } catch (e) {
-                            return pluginLib(...args);
-                        }
-                    }
-                    return pluginLib;
-                };
-
-                // Provide operator wrapper in context for AST registry lookup
-                const context = {
-                    [operatorName]: opWrapper
-                };
-
-                // Execute AST with the $ operator key so astAsync invokes operatorKey logic
-                const result = await astAsync({
-                    node: el,
-                    sandbox: context,
-                    executeAST: { [operatorName]: astValue }
-                });
-
-                if (result !== undefined && !pluginName.startsWith('\u0024')) {
-                    // Attach returned plugin instance directly onto element property
-                    el[pluginName] = result;
+            for (const [key, value] of Object.entries(result)) {
+                if (!key.includes('.') && value !== undefined) {
+                    el[key] = value;
                 }
             }
+
+            createElementHooks(el, hooks, libraries, result);
         }
     } catch (err) {
         console.error('[Plugin System] Failed to parse and execute plugin configuration:', err, rawPluginAttr);
@@ -258,21 +324,23 @@ async function processPlugin(el) {
  * @param {Element|NodeList|Array|string} elements - Target element(s) or DOM query selector
  */
 export function init(elements) {
-    if (!elements) return;
+    if (!elements) return Promise.resolve([]);
 
     if (typeof elements === 'string') {
         elements = document.querySelectorAll(elements);
     }
 
     if (elements instanceof Element) {
-        processPlugin(elements);
+        return processPlugin(elements);
     } else if (elements.length !== undefined || Array.isArray(elements)) {
-        Array.from(elements).forEach(el => {
-            if (el instanceof Element) {
-                processPlugin(el);
-            }
-        });
+        return Promise.all(
+            Array.from(elements)
+                .filter(el => el instanceof Element)
+                .map(el => processPlugin(el))
+        );
     }
+
+    return Promise.resolve([]);
 }
 
 if (typeof document !== 'undefined') {
