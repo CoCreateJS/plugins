@@ -1,9 +1,13 @@
-const path = require("path");
-const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const { EsbuildPlugin } = require("esbuild-loader");
-const { FileUploader } = require("@cocreate/webpack");
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import MiniCssExtractPlugin from "mini-css-extract-plugin";
+import { EsbuildPlugin } from "esbuild-loader";
+import webpackPackage from "@cocreate/webpack";
 
-module.exports = async (env, argv) => {
+const { FileUploader } = webpackPackage;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default async (env, argv) => {
 	const isProduction = argv && argv.mode === "production";
 	const config = {
 		entry: {
@@ -52,7 +56,7 @@ module.exports = async (env, argv) => {
 				})
 			],
 			splitChunks: {
-				pluginsGroups: {
+				cacheGroups: {
 					defaultVendors: false
 				}
 			}

@@ -1,8 +1,9 @@
 import Observer from '@cocreate/observer';
-import { astSync, astAsync } from '@cocreate/utils';
+import { astAsync } from '@cocreate/utils';
 
 const scriptCache = new Map();
-const cssMarker = typeof document !== 'undefined' 
+const pendingElements = new WeakSet();
+const cssMarker = typeof document !== 'undefined'
     ? document.head.querySelector('meta[name="viewport"]') || document.head.lastChild 
     : null;
 
@@ -185,78 +186,43 @@ function getPluginNames(configBlock) {
     return pluginNames;
 }
 
-function createPluginAST(configBlock, pluginNames, libraries) {
-    const ast = {};
-    const hooks = {};
+function createPluginOperations(configBlock, pluginNames, libraries) {
+    const operations = [];
 
     for (const [key, value] of Object.entries(configBlock)) {
         const normalizedKey = key.replace(/^\$/, '');
         const pluginName = normalizedKey.split('.')[0];
 
-        if (key === 'getValue' || key === 'setValue') {
-            hooks[key] = value;
-            continue;
-        }
-
         if (!pluginNames.has(pluginName)) {
-            ast[key] = value;
+            operations.push({ ast: { [key]: value } });
             continue;
         }
 
-        if (normalizedKey.includes('.')) {
-            ast[normalizedKey] = { [`$${normalizedKey}`]: value };
-            continue;
-        }
-
-        const library = libraries[pluginName];
+        let operator = normalizedKey;
+        let parameters = value;
+        const library = libraries['$' + pluginName];
         const members = value && typeof value === 'object' && !Array.isArray(value)
             ? Object.entries(value)
             : [];
 
-        if (typeof library !== 'function' && members.length === 1) {
-            const [member, parameters] = members[0];
-            ast[pluginName] = { [`$${pluginName}.${member}`]: parameters };
-        } else {
-            ast[pluginName] = { [`$${pluginName}`]: value };
+        if (
+            !normalizedKey.includes('.') &&
+            typeof library !== 'function' &&
+            members.length === 1
+        ) {
+            const [member, memberParameters] = members[0];
+            operator = `${pluginName}.${member.replace(/^\$/, '')}`;
+            parameters = memberParameters;
         }
-    }
 
-    return { ast, hooks };
-}
-
-function createRuntimeScope(libraries, result, event) {
-    return {
-        ...libraries,
-        ...result,
-        ...(event ? { event } : {})
-    };
-}
-
-function createElementHooks(el, hooks, libraries, result) {
-    if (hooks.getValue !== undefined) {
-        const getValueAST = typeof hooks.getValue === 'string' && hooks.getValue.startsWith('$')
-            ? { [hooks.getValue]: [] }
-            : hooks.getValue;
-
-        el.getValue = () => astSync({
-            executeAST: getValueAST,
-            sandbox: createRuntimeScope(libraries, result),
-            node: el
-        });
-        el.getValueAsync = () => astAsync({
-            executeAST: getValueAST,
-            sandbox: createRuntimeScope(libraries, result),
-            node: el
+        operations.push({
+            ast: { ['$' + operator]: parameters },
+            pluginName,
+            attach: !normalizedKey.includes('.')
         });
     }
 
-    if (hooks.setValue !== undefined) {
-        el.setValue = (value, dispatch) => astSync({
-            executeAST: hooks.setValue,
-            sandbox: createRuntimeScope(libraries, result, { value, dispatch }),
-            node: el
-        });
-    }
+    return operations;
 }
 
 /**
@@ -281,14 +247,17 @@ async function processPlugin(el) {
             configs = [{ [rawPluginAttr]: [] }];
         }
 
+        const configPlans = configs.map(configBlock => ({
+            configBlock,
+            pluginNames: getPluginNames(configBlock)
+        }));
         const targetPlugins = new Set(
-            configs.flatMap(configBlock => Array.from(getPluginNames(configBlock)))
+            configPlans.flatMap(({ pluginNames }) => Array.from(pluginNames))
         );
 
         await preloadResources(Array.from(targetPlugins));
 
-        for (const configBlock of configs) {
-            const pluginNames = getPluginNames(configBlock);
+        for (const { configBlock, pluginNames } of configPlans) {
             const libraries = {};
 
             for (const pluginName of pluginNames) {
@@ -296,23 +265,28 @@ async function processPlugin(el) {
                 if (!library) {
                     throw new Error(`Plugin '${pluginName}' is not available on window.`);
                 }
-                libraries[pluginName] = library;
+                libraries['$' + pluginName] = library;
             }
 
-            const { ast, hooks } = createPluginAST(configBlock, pluginNames, libraries);
-            const result = await astAsync({
-                executeAST: ast,
-                sandbox: libraries,
-                node: el
-            });
+            const scope = { ...libraries };
+            const operations = createPluginOperations(
+                configBlock,
+                pluginNames,
+                libraries
+            );
 
-            for (const [key, value] of Object.entries(result)) {
-                if (!key.includes('.') && value !== undefined) {
-                    el[key] = value;
+            for (const operation of operations) {
+                const value = await astAsync({
+                    executeAST: operation.ast,
+                    sandbox: scope,
+                    node: el
+                });
+
+                if (operation.attach && value !== undefined) {
+                    scope['$' + operation.pluginName] = value;
+                    el[operation.pluginName] = value;
                 }
             }
-
-            createElementHooks(el, hooks, libraries, result);
         }
     } catch (err) {
         console.error('[Plugin System] Failed to parse and execute plugin configuration:', err, rawPluginAttr);
@@ -343,6 +317,16 @@ export function init(elements) {
     return Promise.resolve([]);
 }
 
+function scheduleInit(element) {
+    if (!element || pendingElements.has(element)) return;
+
+    pendingElements.add(element);
+    requestAnimationFrame(() => {
+        pendingElements.delete(element);
+        if (element.isConnected) init(element);
+    });
+}
+
 if (typeof document !== 'undefined') {
     const selector = "[plugin]";
     Observer.init({
@@ -350,7 +334,9 @@ if (typeof document !== 'undefined') {
         types: ["addedNodes", "attributes"],
         selector: selector,
         attributeFilter: ["plugin"],
-        callback: (mutation) => init(mutation.target)
+        callback: (mutation) => {
+            scheduleInit(mutation.target);
+        }
     });
 
     init(document.querySelectorAll(selector));
