@@ -176,14 +176,44 @@ function getPluginNames(configBlock) {
     const configuredPlugins = getPluginsConfig();
     const pluginNames = new Set();
 
-    for (const key of Object.keys(configBlock)) {
-        const name = key.replace(/^\$/, '').split('.')[0];
-        if (configuredPlugins[name] || getPluginLibrary(name)) {
-            pluginNames.add(name);
+    function collect(value) {
+        if (!value || typeof value !== 'object') return;
+
+        for (const [key, childValue] of Object.entries(value)) {
+            const name = key.replace(/^\$/, '').split('.')[0];
+            if (configuredPlugins[name] || getPluginLibrary(name)) {
+                pluginNames.add(name);
+            }
+            collect(childValue);
         }
     }
 
+    collect(configBlock);
+
     return pluginNames;
+}
+
+function isClassLike(value) {
+    if (typeof value !== 'function') return false;
+
+    const source = Function.prototype.toString.call(value);
+    if (/^class\s|^class{/.test(source)) return true;
+
+    return !!value.prototype && Object.getOwnPropertyNames(value.prototype)
+        .some(member => member !== 'constructor');
+}
+
+function getPluginMember(library, path) {
+    let value = library;
+
+    for (const property of path) {
+        if (value === null || value === undefined || !(property in Object(value))) {
+            return undefined;
+        }
+        value = value[property];
+    }
+
+    return value;
 }
 
 function createPluginOperations(configBlock, pluginNames, libraries) {
@@ -201,6 +231,8 @@ function createPluginOperations(configBlock, pluginNames, libraries) {
         let operator = normalizedKey;
         let parameters = value;
         const library = libraries['$' + pluginName];
+        const memberPath = normalizedKey.split('.').slice(1);
+        const pluginMember = getPluginMember(library, memberPath);
         const members = value && typeof value === 'object' && !Array.isArray(value)
             ? Object.entries(value)
             : [];
@@ -218,7 +250,7 @@ function createPluginOperations(configBlock, pluginNames, libraries) {
         operations.push({
             ast: { ['$' + operator]: parameters },
             pluginName,
-            attach: !normalizedKey.includes('.')
+            attach: !normalizedKey.includes('.') || isClassLike(pluginMember)
         });
     }
 
@@ -268,7 +300,22 @@ async function processPlugin(el) {
                 libraries['$' + pluginName] = library;
             }
 
-            const scope = { ...libraries };
+            const scope = { ...libraries, $this: el };
+
+            if (Object.prototype.hasOwnProperty.call(configBlock, '$return')) {
+                const value = await astAsync({
+                    executeAST: configBlock,
+                    sandbox: scope,
+                    node: el
+                });
+
+                if (value !== undefined && pluginNames.size === 1) {
+                    const [pluginName] = pluginNames;
+                    el[pluginName] = value;
+                }
+                continue;
+            }
+
             const operations = createPluginOperations(
                 configBlock,
                 pluginNames,
