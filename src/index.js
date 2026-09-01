@@ -3,6 +3,7 @@ import { astAsync } from '@cocreate/utils';
 
 const scriptCache = new Map();
 const pendingElements = new WeakSet();
+const initializedPlugins = new WeakMap();
 const cssMarker = typeof document !== 'undefined'
     ? document.head.querySelector('meta[name="viewport"]') || document.head.lastChild 
     : null;
@@ -269,6 +270,11 @@ async function processPlugin(el) {
     const rawPluginAttr = pluginAttrNode?.value?.trim();
     if (!rawPluginAttr) return;
 
+    // Added-node and attribute observers can discover the same element during
+    // separate mutation cycles. Do not initialize an unchanged plugin twice.
+    if (initializedPlugins.get(el) === rawPluginAttr) return;
+    initializedPlugins.set(el, rawPluginAttr);
+
     try {
         let configs = [];
 
@@ -336,6 +342,7 @@ async function processPlugin(el) {
             }
         }
     } catch (err) {
+        initializedPlugins.delete(el);
         console.error('[Plugin System] Failed to parse and execute plugin configuration:', err, rawPluginAttr);
     }
 }
