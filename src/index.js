@@ -112,7 +112,8 @@ function loadCSS(item) {
 
 /**
  * Preloads JS scripts and CSS stylesheets declared in global plugins config.
- * Runs in parallel using Promise.allSettled.
+ * Loads each plugin's JavaScript resources in declared order while allowing
+ * independent plugins and stylesheets to load in parallel.
  * @param {Array<string>} pluginNames - Names of target plugins to preload
  */
 async function preloadResources(pluginNames) {
@@ -128,7 +129,11 @@ async function preloadResources(pluginNames) {
             }
             if (config.js) {
                 const jsFiles = Array.isArray(config.js) ? config.js : [config.js];
-                jsFiles.forEach(src => promises.push(loadScript(src)));
+                promises.push((async () => {
+                    for (const src of jsFiles) {
+                        await loadScript(src);
+                    }
+                })());
             }
         }
     }
