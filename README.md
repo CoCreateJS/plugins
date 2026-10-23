@@ -27,13 +27,32 @@ For interactive examples, visit the [CoCreate Plugins documentation](https://coc
 
 ---
 
+## Explicit instance storage
+
+Plugin results are not automatically assigned to the host element. To retain a
+returned instance, explicitly assign it using AST:
+
+```html
+<div plugin='{
+    "$this.myInstance": {
+        "$ExamplePlugin": ["$this", {}]
+    }
+}'></div>
+```
+
+Here `$this` identifies the host element and `myInstance` names the property to
+write. The nested initializer executes first, then its returned value is
+assigned to that property. A global plugin call that needs no retained result
+can run without this assignment. Code that previously relied on automatic `element.PluginName`
+storage must explicitly assign and reference the instance instead.
+
 ## Architectural Overview
 
 `@cocreate/plugins` connects three parts of the browser runtime:
 
 1. A plugin definition in `window.CoCreateConfig.plugins` identifies the JavaScript and CSS resources.
 2. A DOM element's `plugin` attribute contains an AST configuration.
-3. The resolved plugin instance and other top-level AST values are attached to that element.
+3. AST executes the configuration. Results are stored only where the configuration explicitly assigns them.
 
 ```text
 CoCreateConfig.plugins
@@ -46,10 +65,10 @@ window.PluginName
         ├── AST executes plugin configuration
         │
         ▼
-element.PluginName
+result (optionally assigned through AST)
 ```
 
-Plugin configurations execute sequentially. A constructor result created by one top-level key is therefore available to every key that follows it.
+Plugin operations execute sequentially. Plugin names continue to refer to their global libraries; constructor results do not automatically replace those references or attach to the element.
 
 The module observes `[plugin]` elements automatically, including elements added or updated after the initial page load.
 
@@ -141,12 +160,12 @@ Registration describes where a library is loaded from. Initialization behavior b
 
 ### Constructor or Function
 
-The simplest object form calls the registered global and assigns its result to the element under the same name.
+Use an explicit AST call to initialize a plugin and a dotted destination to retain its result on the element.
 
 ```html
 <div
     plugin='{
-        "SimpleBar": ["$this", {}]
+        "$this.SimpleBar": { "$SimpleBar": ["$this", {}] }
     }'
     style="max-height: 300px">
 </div>
@@ -165,11 +184,13 @@ For a global function that receives a single options object:
 ```html
 <button
     plugin='{
-        "Toastify": {
-            "text": "Saved successfully",
-            "duration": 3000
+        "$this.toast": {
+            "$Toastify": {
+                "text": "Saved successfully",
+                "duration": 3000
+            }
         },
-        "Toastify.showToast": []
+        "$this.toast.showToast": []
     }'>
     Show notification
 </button>
@@ -183,21 +204,18 @@ Some libraries expose constructors as properties of a global namespace. A single
 <div
     id="calendar"
     plugin='{
-        "FullCalendar": {
-            "Calendar": [
+        "$this.FullCalendar": {
+            "$FullCalendar.Calendar": [
                 "$this",
-                {
-                    "initialView": "dayGridMonth",
-                    "editable": true
-                }
+                { "initialView": "dayGridMonth", "editable": true }
             ]
         },
-        "FullCalendar.render": []
+        "$this.FullCalendar.render": []
     }'>
 </div>
 ```
 
-The first key creates the instance:
+The first key explicitly creates and stores the instance:
 
 ```javascript
 element.FullCalendar = new window.FullCalendar.Calendar(element, options);
@@ -226,8 +244,8 @@ The attribute can contain an array. Each object is processed in order:
 ```html
 <div
     plugin='[
-        { "FirstPlugin": ["$this"] },
-        { "SecondPlugin": ["$this", {}] }
+        { "$FirstPlugin": ["$this"] },
+        { "$SecondPlugin": ["$this", {}] }
     ]'>
 </div>
 ```
@@ -236,29 +254,23 @@ The attribute can contain an array. Each object is processed in order:
 
 ## AST Execution Model
 
-Each configuration object is converted into one AST program and evaluated sequentially.
+Each JSON configuration object is passed unchanged to `astAsync`, once, with
+the registered libraries and `$this` in its sandbox and the host element as
+`node`. The plugin loader does not wrap individual entries or rewrite ordinary
+keys into calls. Sibling entries share AST's evaluation scope, including values
+created by earlier entries. Configuration arrays execute one block at a time.
+The bare-name shorthand is expanded to `{ "$PluginName": [] }`.
 
 ```json
 {
-    "FullCalendar": {
-        "Calendar": ["$this", {}]
-    },
-    "FullCalendar.render": []
+    "instance": { "$FullCalendar.Calendar": ["$this", {}] },
+    "$this.calendar": "$instance",
+    "$instance.render": []
 }
 ```
 
-Conceptually becomes:
-
-```json
-{
-    "FullCalendar": {
-        "$FullCalendar.Calendar": ["$this", {}]
-    },
-    "FullCalendar.render": {
-        "$FullCalendar.render": []
-    }
-}
-```
+JSON configs that previously relied on implicit plugin calls must use explicit
+`$PluginName` or `$PluginName.method` keys. Ordinary keys declare AST data.
 
 Execution follows these rules:
 
@@ -269,22 +281,22 @@ Execution follows these rules:
 - Native classes are instantiated with `new`.
 - Functions are called normally.
 - A resolved top-level value becomes available to subsequent keys.
-- Resolved top-level keys without dot notation are attached to the element.
-- Dotted keys represent operations and are not attached as element properties.
+- No result is automatically attached to the element, including `$return` results.
+- Use an explicit AST assignment to retain an instance on `$this` or another destination.
 
 Ordinary non-plugin keys remain part of the AST program, so they can store intermediate results or participate in later operations.
 
 ```html
 <div
     plugin='{
-        "ExamplePlugin": ["$this"],
-        "items": { "$ExamplePlugin.getItems": [] },
+        "instance": { "$ExamplePlugin": ["$this"] },
+        "items": { "$instance.getItems": [] },
         "count": "$items.length"
     }'>
 </div>
 ```
 
-After evaluation, `element.ExamplePlugin`, `element.items`, and `element.count` contain the corresponding resolved values.
+Top-level result keys do not automatically become element properties. Use an explicit assignment to store values on the element.
 
 ---
 

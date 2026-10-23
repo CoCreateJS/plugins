@@ -199,73 +199,9 @@ function getPluginNames(configBlock) {
     return pluginNames;
 }
 
-function isClassLike(value) {
-    if (typeof value !== 'function') return false;
-
-    const source = Function.prototype.toString.call(value);
-    if (/^class\s|^class{/.test(source)) return true;
-
-    return !!value.prototype && Object.getOwnPropertyNames(value.prototype)
-        .some(member => member !== 'constructor');
-}
-
-function getPluginMember(library, path) {
-    let value = library;
-
-    for (const property of path) {
-        if (value === null || value === undefined || !(property in Object(value))) {
-            return undefined;
-        }
-        value = value[property];
-    }
-
-    return value;
-}
-
-function createPluginOperations(configBlock, pluginNames, libraries) {
-    const operations = [];
-
-    for (const [key, value] of Object.entries(configBlock)) {
-        const normalizedKey = key.replace(/^\$/, '');
-        const pluginName = normalizedKey.split('.')[0];
-
-        if (!pluginNames.has(pluginName)) {
-            operations.push({ ast: { [key]: value } });
-            continue;
-        }
-
-        let operator = normalizedKey;
-        let parameters = value;
-        const library = libraries['$' + pluginName];
-        const memberPath = normalizedKey.split('.').slice(1);
-        const pluginMember = getPluginMember(library, memberPath);
-        const members = value && typeof value === 'object' && !Array.isArray(value)
-            ? Object.entries(value)
-            : [];
-
-        if (
-            !normalizedKey.includes('.') &&
-            typeof library !== 'function' &&
-            members.length === 1
-        ) {
-            const [member, memberParameters] = members[0];
-            operator = `${pluginName}.${member.replace(/^\$/, '')}`;
-            parameters = memberParameters;
-        }
-
-        operations.push({
-            ast: { ['$' + operator]: parameters },
-            pluginName,
-            attach: !normalizedKey.includes('.') || isClassLike(pluginMember)
-        });
-    }
-
-    return operations;
-}
-
 /**
  * Parses element 'plugin' attribute, executes AST configuration via astAsync,
- * sets core library on window, and attaches instance onto element property.
+ * with result storage controlled explicitly by the AST configuration.
  * @param {Element} el - DOM element with plugin attribute
  */
 async function processPlugin(el) {
@@ -287,7 +223,7 @@ async function processPlugin(el) {
             const parsedConfig = JSON.parse(rawPluginAttr);
             configs = Array.isArray(parsedConfig) ? parsedConfig : [parsedConfig];
         } else {
-            configs = [{ [rawPluginAttr]: [] }];
+            configs = [{ ['$' + rawPluginAttr.replace(/^\$/, '')]: [] }];
         }
 
         const configPlans = configs.map(configBlock => ({
@@ -313,38 +249,11 @@ async function processPlugin(el) {
 
             const scope = { ...libraries, $this: el };
 
-            if (Object.prototype.hasOwnProperty.call(configBlock, '$return')) {
-                const value = await astAsync({
-                    executeAST: configBlock,
-                    sandbox: scope,
-                    node: el
-                });
-
-                if (value !== undefined && pluginNames.size === 1) {
-                    const [pluginName] = pluginNames;
-                    el[pluginName] = value;
-                }
-                continue;
-            }
-
-            const operations = createPluginOperations(
-                configBlock,
-                pluginNames,
-                libraries
-            );
-
-            for (const operation of operations) {
-                const value = await astAsync({
-                    executeAST: operation.ast,
-                    sandbox: scope,
-                    node: el
-                });
-
-                if (operation.attach && value !== undefined) {
-                    scope['$' + operation.pluginName] = value;
-                    el[operation.pluginName] = value;
-                }
-            }
+            await astAsync({
+                executeAST: configBlock,
+                sandbox: scope,
+                node: el
+            });
         }
     } catch (err) {
         initializedPlugins.delete(el);
