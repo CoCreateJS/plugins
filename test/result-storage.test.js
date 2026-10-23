@@ -151,3 +151,62 @@ test('configuration blocks execute in order without special treatment for $retur
     assert.equal(el.second, 'first');
     assert.equal(Object.hasOwn(el, 'ExamplePlugin'), false);
 });
+
+test('concurrent initialization calls await the same pending setup', async () => {
+    let release;
+    let entered;
+    let calls = 0;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    const app = runtime({ ExamplePlugin() {} }, async args => {
+        calls++;
+        entered();
+        await gate;
+        return astAsync(args);
+    });
+    const element = new Element('ExamplePlugin');
+    const first = app.init(element);
+    await started;
+    let secondFinished = false;
+    const second = app.init(element).then(() => { secondFinished = true; });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(secondFinished, false);
+    assert.equal(calls, 1);
+    release();
+    await Promise.all([first, second]);
+    assert.equal(secondFinished, true);
+    await app.init(element);
+    assert.equal(calls, 1);
+});
+
+test('a plugin can await another initializer before connecting its result', async () => {
+    let release;
+    let entered;
+    let connected = false;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    const markdown = new Element({ '$this.parser': { $Parser: [] } });
+    const CoCreate = { plugins: { init: () => app.init(markdown) } };
+    const app = runtime({
+        CoCreate,
+        async Parser() {
+            entered();
+            await gate;
+            return { ready: true };
+        },
+        connect() {
+            assert.equal(markdown.parser.ready, true);
+            connected = true;
+        }
+    });
+    const prism = new Element({ '$CoCreate.plugins.init': ['#markdown'], $connect: [] });
+    const first = app.init(markdown);
+    await started;
+    const second = app.init(prism);
+    await Promise.resolve();
+    assert.equal(connected, false);
+    release();
+    await Promise.all([first, second]);
+    assert.equal(connected, true);
+});

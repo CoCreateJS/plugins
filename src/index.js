@@ -4,6 +4,7 @@ import { astAsync } from '@cocreate/utils';
 const scriptCache = new Map();
 const pendingElements = new WeakSet();
 const initializedPlugins = new WeakMap();
+const initializingPlugins = new WeakMap();
 const cssMarker = typeof document !== 'undefined'
     ? document.head.querySelector('meta[name="viewport"]') || document.head.lastChild 
     : null;
@@ -204,18 +205,25 @@ function getPluginNames(configBlock) {
  * with result storage controlled explicitly by the AST configuration.
  * @param {Element} el - DOM element with plugin attribute
  */
-async function processPlugin(el) {
-    if (!el || !el.attributes) return;
+function processPlugin(el) {
+    if (!el || !el.attributes) return Promise.resolve();
 
     const pluginAttrNode = el.attributes['plugin'] || el.attributes.getNamedItem?.('plugin');
     const rawPluginAttr = pluginAttrNode?.value?.trim();
-    if (!rawPluginAttr) return;
+    if (!rawPluginAttr) return Promise.resolve();
 
-    // Added-node and attribute observers can discover the same element during
-    // separate mutation cycles. Do not initialize an unchanged plugin twice.
-    if (initializedPlugins.get(el) === rawPluginAttr) return;
-    initializedPlugins.set(el, rawPluginAttr);
+    const pending = initializingPlugins.get(el);
+    if (pending?.value === rawPluginAttr) return pending.promise;
+    if (initializedPlugins.get(el) === rawPluginAttr) return Promise.resolve();
 
+    const promise = initializePlugin(el, rawPluginAttr).finally(() => {
+        if (initializingPlugins.get(el)?.promise === promise) initializingPlugins.delete(el);
+    });
+    initializingPlugins.set(el, { value: rawPluginAttr, promise });
+    return promise;
+}
+
+async function initializePlugin(el, rawPluginAttr) {
     try {
         let configs = [];
 
@@ -255,6 +263,7 @@ async function processPlugin(el) {
                 node: el
             });
         }
+        initializedPlugins.set(el, rawPluginAttr);
     } catch (err) {
         initializedPlugins.delete(el);
         console.error('[Plugin System] Failed to parse and execute plugin configuration:', err, rawPluginAttr);
