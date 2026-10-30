@@ -7,6 +7,32 @@
   "publishConfig": {
     "access": "public"
   },
+  "cocreate": {
+    "environment": [
+      "client"
+    ],
+    "interface": {
+      "schemaVersion": 1,
+      "summary": "CoCreate plugins",
+      "source": "src/index.js",
+      "declarative": {
+        "selectors": [
+          "[plugin]"
+        ],
+        "attributes": [
+          {
+            "name": "plugin"
+          }
+        ]
+      },
+      "api": {
+        "exports": [
+          "init",
+          "registerPlugin"
+        ]
+      }
+    }
+  },
   "scripts": {
     "start": "webpack --config webpack.config.js",
     "build": "webpack --mode=production --config webpack.config.js",
