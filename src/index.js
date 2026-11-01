@@ -12,6 +12,8 @@ const cssMarker = typeof document !== 'undefined'
 /**
  * Retrieves the global plugin configuration object from window.CoCreateConfig.
  * @returns {Object}
+ * @private
+ * @environment client
  */
 function getPluginsConfig() {
     if (typeof window !== 'undefined' && window.CoCreateConfig && window.CoCreateConfig.plugins) {
@@ -24,6 +26,8 @@ function getPluginsConfig() {
  * Dynamically registers or updates a plugin definition in global config.
  * @param {string} name - Plugin identifier
  * @param {Object} config - Plugin configuration object (js, css, etc.)
+ * @public
+ * @environment client
  */
 export function registerPlugin(name, config) {
     if (typeof window !== 'undefined') {
@@ -38,6 +42,8 @@ export function registerPlugin(name, config) {
  * Sets crossOrigin="anonymous" by default for simple string URLs.
  * @param {string|Object} item - Script URL or object with configuration
  * @returns {Promise<void>}
+ * @private
+ * @environment client
  */
 function loadScript(item) {
     const src = typeof item === 'string' ? item : item?.src;
@@ -77,6 +83,8 @@ function loadScript(item) {
  * Sets crossOrigin="anonymous" by default for simple string URLs.
  * @param {string|Object} item - Stylesheet URL or object with configuration
  * @returns {Promise<void>}
+ * @private
+ * @environment client
  */
 function loadCSS(item) {
     const href = typeof item === 'string' ? item : item?.href;
@@ -116,6 +124,8 @@ function loadCSS(item) {
  * Loads each plugin's JavaScript resources in declared order while allowing
  * independent plugins and stylesheets to load in parallel.
  * @param {Array<string>} pluginNames - Names of target plugins to preload
+ * @private
+ * @environment client
  */
 async function preloadResources(pluginNames) {
     const plugins = getPluginsConfig();
@@ -153,6 +163,8 @@ async function preloadResources(pluginNames) {
  * @param {number} retries - Number of retries
  * @param {number} delay - Retry interval in ms
  * @returns {Promise<Function|Object|null>}
+ * @private
+ * @environment client
  */
 async function waitForPluginOnWindow(pluginName, retries = 5, delay = 50) {
     for (let i = 0; i < retries; i++) {
@@ -167,6 +179,8 @@ async function waitForPluginOnWindow(pluginName, retries = 5, delay = 50) {
  * Helper to resolve and normalize plugin library constructor from window object.
  * @param {string} pluginName - The target plugin identifier
  * @returns {Function|Object|null}
+ * @private
+ * @environment client
  */
 function getPluginLibrary(pluginName) {
     if (typeof window === 'undefined') return null;
@@ -204,6 +218,8 @@ function getPluginNames(configBlock) {
  * Parses element 'plugin' attribute, executes AST configuration via astAsync,
  * with result storage controlled explicitly by the AST configuration.
  * @param {Element} el - DOM element with plugin attribute
+ * @private
+ * @environment client
  */
 function processPlugin(el) {
     if (!el || !el.attributes) return Promise.resolve();
@@ -273,6 +289,8 @@ async function initializePlugin(el, rawPluginAttr) {
 /**
  * Initializes plugins on single elements, collections, or selector query matches.
  * @param {Element|NodeList|Array|string} elements - Target element(s) or DOM query selector
+ * @public
+ * @environment client
  */
 export function init(elements) {
     if (!elements) return Promise.resolve([]);
@@ -320,3 +338,33 @@ if (typeof document !== 'undefined') {
 }
 
 export default { init, registerPlugin };
+
+/**
+ *
+ * @name plugin
+ * @kind member
+ * @attribute
+ * @environment client
+ */
+
+/**
+ * CoCreate plugins
+ *
+ * @module plugins
+ * @environment client
+ */
+
+/**
+ * Declarative selectors recognized by this module.
+ *
+ * @name declarative-selectors
+ * @kind member
+ * @selectors
+ * @environment client
+ * @example
+ * ```json
+ * [
+ *   "[plugin]"
+ * ]
+ * ```
+ */
