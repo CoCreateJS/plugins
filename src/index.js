@@ -342,8 +342,7 @@ export default { init, registerPlugin };
 /**
  *
  * @name plugin
- * @kind member
- * @attribute
+ * @kind attribute
  * @environment client
  */
 
