@@ -426,19 +426,19 @@ AST configuration controls how an already trusted plugin is initialized; it does
 
 ## Announcements
 
-Updates are documented in the project [CHANGELOG](https://github.com/CoCreateJS/CoCreate-plugins/blob/master/CHANGELOG.md) and [releases](https://github.com/CoCreateJS/CoCreate-plugins/releases).
+Updates are documented in the project [CHANGELOG](https://github.com/CoCreateJS/plugins/blob/master/CHANGELOG.md) and [releases](https://github.com/CoCreateJS/plugins/releases).
 
 ## Roadmap
 
-See the open [issues](https://github.com/CoCreateJS/CoCreate-plugins/issues) and [pull requests](https://github.com/CoCreateJS/CoCreate-plugins/pulls) for current development priorities.
+See the open [issues](https://github.com/CoCreateJS/plugins/issues) and [pull requests](https://github.com/CoCreateJS/plugins/pulls) for current development priorities.
 
 ## How to Contribute
 
-Contributions are welcome. See [CONTRIBUTING.md](https://github.com/CoCreateJS/CoCreate-plugins/blob/master/CONTRIBUTING.md) before opening an issue or pull request.
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/CoCreateJS/plugins/blob/master/CONTRIBUTING.md) before opening an issue or pull request.
 
 ## License
 
 This software is dual-licensed under the GNU Affero General Public License version 3 (AGPLv3) and a commercial license.
 
-- **Open-source use:** Modifications and derivative works must comply with the AGPLv3. See the [LICENSE](https://github.com/CoCreateJS/CoCreate-plugins/blob/master/LICENSE).
+- **Open-source use:** Modifications and derivative works must comply with the AGPLv3. See the [LICENSE](https://github.com/CoCreateJS/plugins/blob/master/LICENSE).
 - **Commercial use:** A commercial license is available from [CoCreate](https://CoCreateJS.com).

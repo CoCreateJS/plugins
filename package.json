@@ -14,15 +14,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cocreatejs/CoCreate-plugins.git"
+    "url": "git+https://github.com/CoCreateJS/plugins.git"
   },
   "bugs": {
-    "url": "https://github.com/CoCreateJS/CoCreate-plugins/issues"
+    "url": "https://github.com/CoCreateJS/plugins/issues"
   },
   "homepage": "https://CoCreateJS.com/docs/plugins",
   "funding": {
     "type": "GitHub Sponsors ❤",
-    "url": "https://github.com/sponsors/CoCreate-app"
+    "url": "https://github.com/sponsors/CoCreateJS"
   },
   "type": "module",
   "main": "./src/index.js",
