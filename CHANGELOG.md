@@ -1,3 +1,38 @@
+# [2.0.0](https://github.com/CoCreateJS/plugins/compare/v1.4.2...v2.0.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* add Deno specific entries to .gitignore ([2e77744](https://github.com/CoCreateJS/plugins/commit/2e77744e33cab2968d7f9c2bf41f9dae38f25455))
+* await pending plugin initialization ([d500cd2](https://github.com/CoCreateJS/plugins/commit/d500cd23245ddbbca0f31951dd8356888981ee4a))
+* bump [@cocreate](https://github.com/cocreate) dependencies ([7893b9e](https://github.com/CoCreateJS/plugins/commit/7893b9ea09c130488553d33bdb4a7c6dd71e68f0))
+* bump versions ([e70fdfa](https://github.com/CoCreateJS/plugins/commit/e70fdfadbbebb13880dc1cd2c40d5ade30092f37))
+* bump versions ([321063f](https://github.com/CoCreateJS/plugins/commit/321063f9c223b5107629dcf516ea18380e0a5ad5))
+* execute plugin configurations directly through AST ([f507b05](https://github.com/CoCreateJS/plugins/commit/f507b05fa7a831f9a7686067f1eaf506543b29e9))
+* improve dynamic plugin initialization ([f834366](https://github.com/CoCreateJS/plugins/commit/f834366dda96db9aaf678780f14edbca159f6fb4))
+* prevent duplicate plugin initialization ([7e36818](https://github.com/CoCreateJS/plugins/commit/7e368188c7cfd8804b7401cca609989dcfe99d2e))
+* remove trailing slash from node_modules entry in .gitignore ([77ec08a](https://github.com/CoCreateJS/plugins/commit/77ec08a37696cba91aea9fcde55a1bd0e644e02c))
+* stabilize dynamic plugin initialization ([4bd1763](https://github.com/CoCreateJS/plugins/commit/4bd176386f1e18a5ae865b7df1c19f43c5948b24))
+* update git url ([06fdd2d](https://github.com/CoCreateJS/plugins/commit/06fdd2d13142a4614e0f983c0248753df2f0250d))
+* update GitHub Actions to use latest versions and sync package.json description ([bf390e2](https://github.com/CoCreateJS/plugins/commit/bf390e24d9dbcb1738358fa6beba2d0546ce94ac))
+* update string escape for plugin name checks ([2d99094](https://github.com/CoCreateJS/plugins/commit/2d9909486f23a6b6e38efbd107faa475893c03a4))
+
+
+### chore
+
+* record package identity migration as breaking ([9926af9](https://github.com/CoCreateJS/plugins/commit/9926af94d90d5330def0245d22348f6616d31188))
+
+
+### Features
+
+* execute plugin configs through AST ([4e4d3a5](https://github.com/CoCreateJS/plugins/commit/4e4d3a509ea742fcc6b4c62902760438fa9c220c))
+* replace uuid import and usage with utils ([f92a5a3](https://github.com/CoCreateJS/plugins/commit/f92a5a33ad9bcdfde6fb75d56dac8f0ff7a6b679))
+
+
+### BREAKING CHANGES
+
+* Consumers must install @cocreate/plugins and use the renamed CoCreateJS repository identity; the previous package and repository identities are no longer supported.
+
 ## [1.4.2](https://github.com/CoCreateJS/CoCreate-plugins/compare/v1.4.1...v1.4.2) (2026-07-19)
 
 
