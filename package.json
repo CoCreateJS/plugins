@@ -27,11 +27,11 @@
   "type": "module",
   "main": "./src/index.js",
   "dependencies": {
-    "@cocreate/observer": "^2.0.0",
-    "@cocreate/utils": "^2.0.0"
+    "@cocreate/observer": "^2.0.1",
+    "@cocreate/utils": "^2.0.2"
   },
   "devDependencies": {
-    "@cocreate/webpack": "^2.0.0"
+    "@cocreate/webpack": "^2.0.1"
   },
   "allowScripts": {
     "@cocreate/observer@1.19.0": true,
